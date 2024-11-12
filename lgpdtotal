@@ -1,0 +1,177 @@
+// LGPD TOTAL - Código do Aplicativo
+// Desenvolvido utilizando Kotlin com Android Studio
+
+// build.gradle (Configuração do projeto)
+plugins {
+    id 'com.android.application'
+    id 'kotlin-android'
+}
+
+defaultConfig {
+    applicationId "com.example.lgpdtotal"
+    minSdkVersion 21
+    targetSdkVersion 33
+    versionCode 1
+    versionName "1.0"
+}
+
+dependencies {
+    implementation "org.jetbrains.kotlin:kotlin-stdlib:$kotlin_version"
+    implementation 'androidx.appcompat:appcompat:1.3.0'
+    implementation 'androidx.lifecycle:lifecycle-viewmodel-ktx:2.3.1'
+    implementation 'androidx.room:room-runtime:2.4.0'
+    kapt 'androidx.room:room-compiler:2.4.0'
+    implementation 'androidx.work:work-runtime-ktx:2.7.0'
+}
+
+// MainActivity.kt (Tela Principal)
+package com.example.lgpdtotal
+
+import android.os.Bundle
+import androidx.activity.viewModels
+import androidx.appcompat.app.AppCompatActivity
+import androidx.lifecycle.Observer
+import androidx.recyclerview.widget.LinearLayoutManager
+import com.example.lgpdtotal.databinding.ActivityMainBinding
+
+class MainActivity : AppCompatActivity() {
+    private lateinit var binding: ActivityMainBinding
+    private val viewModel: ChecklistViewModel by viewModels()
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        binding = ActivityMainBinding.inflate(layoutInflater)
+        setContentView(binding.root)
+
+        binding.recyclerView.layoutManager = LinearLayoutManager(this)
+        val adapter = ChecklistAdapter()
+        binding.recyclerView.adapter = adapter
+
+        viewModel.allItems.observe(this, Observer { items ->
+            items?.let { adapter.submitList(it) }
+        })
+
+        binding.addButton.setOnClickListener {
+            val newItemText = binding.editText.text.toString()
+            if (newItemText.isNotEmpty()) {
+                viewModel.insert(ChecklistItem(newItemText))
+                binding.editText.text.clear()
+            }
+        }
+    }
+}
+
+// ChecklistViewModel.kt (ViewModel para gerenciar dados)
+package com.example.lgpdtotal
+
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.launch
+
+class ChecklistViewModel(private val repository: ChecklistRepository) : ViewModel() {
+    val allItems = repository.allItems
+
+    fun insert(item: ChecklistItem) = viewModelScope.launch {
+        repository.insert(item)
+    }
+}
+
+// ChecklistRepository.kt (Gerencia a fonte de dados)
+package com.example.lgpdtotal
+
+import androidx.lifecycle.LiveData
+
+class ChecklistRepository(private val checklistDao: ChecklistDao) {
+    val allItems: LiveData<List<ChecklistItem>> = checklistDao.getAllItems()
+
+    suspend fun insert(item: ChecklistItem) {
+        checklistDao.insert(item)
+    }
+}
+
+// ChecklistDao.kt (Interface de Acesso ao Banco de Dados)
+package com.example.lgpdtotal
+
+import androidx.lifecycle.LiveData
+import androidx.room.Dao
+import androidx.room.Insert
+import androidx.room.Query
+
+@Dao
+interface ChecklistDao {
+    @Query("SELECT * FROM checklist_table ORDER BY item ASC")
+    fun getAllItems(): LiveData<List<ChecklistItem>>
+
+    @Insert
+    suspend fun insert(item: ChecklistItem)
+}
+
+// ChecklistItem.kt (Entidade do Banco de Dados)
+package com.example.lgpdtotal
+
+import androidx.room.Entity
+import androidx.room.PrimaryKey
+
+@Entity(tableName = "checklist_table")
+data class ChecklistItem(
+    @PrimaryKey(autoGenerate = true) val id: Int = 0,
+    val item: String
+)
+
+// ChecklistAdapter.kt (Adapter para RecyclerView)
+package com.example.lgpdtotal
+
+import android.view.LayoutInflater
+import android.view.ViewGroup
+import androidx.recyclerview.widget.ListAdapter
+import androidx.recyclerview.widget.DiffUtil
+import androidx.recyclerview.widget.RecyclerView
+import com.example.lgpdtotal.databinding.ChecklistItemBinding
+
+class ChecklistAdapter : ListAdapter<ChecklistItem, ChecklistAdapter.ChecklistViewHolder>(ChecklistComparator()) {
+
+    override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ChecklistViewHolder {
+        val binding = ChecklistItemBinding.inflate(LayoutInflater.from(parent.context), parent, false)
+        return ChecklistViewHolder(binding)
+    }
+
+    override fun onBindViewHolder(holder: ChecklistViewHolder, position: Int) {
+        val current = getItem(position)
+        holder.bind(current.item)
+    }
+
+    class ChecklistViewHolder(private val binding: ChecklistItemBinding) : RecyclerView.ViewHolder(binding.root) {
+        fun bind(text: String) {
+            binding.textView.text = text
+        }
+    }
+
+    class ChecklistComparator : DiffUtil.ItemCallback<ChecklistItem>() {
+        override fun areItemsTheSame(oldItem: ChecklistItem, newItem: ChecklistItem): Boolean {
+            return oldItem.id == newItem.id
+        }
+
+        override fun areContentsTheSame(oldItem: ChecklistItem, newItem: ChecklistItem): Boolean {
+            return oldItem == newItem
+        }
+    }
+}
+
+// AndroidManifest.xml (Configuração do Manifesto)
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="com.example.lgpdtotal">
+
+    <application
+        android:allowBackup="true"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:theme="@style/Theme.LgpdTotal">
+        <activity android:name=".MainActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+    </application>
+
+</manifest>
